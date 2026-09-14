@@ -105,7 +105,12 @@ function Get-BlockingProcesses([string[]]$Folders) {
     $filter = "Name='FGOLocalPlatform.exe' OR Name='ago.exe' OR Name='amdaemon.exe'"
     foreach ($process in @(Get-CimInstance Win32_Process -Filter $filter -ErrorAction SilentlyContinue)) {
         $running = $process.ExecutablePath
-        if (-not $running) { $found += "$($process.Name) (pid $($process.ProcessId))"; continue }
+        if (-not $running) {
+            # Started as administrator: a normal-rights session cannot read its folder, so it cannot be
+            # ruled out. Say that plainly rather than claiming it belongs to this install.
+            $found += "$($process.Name) (pid $($process.ProcessId), started as administrator so its folder cannot be read)"
+            continue
+        }
         foreach ($folder in $Folders) {
             if (-not $folder) { continue }
             $prefix = $folder.TrimEnd('\') + '\'
@@ -156,7 +161,7 @@ Write-Host "Install: $Install"
 
 $blocking = @(Get-BlockingProcesses @($Install, "$Install EN"))
 if ($blocking.Count -gt 0) {
-    Stop-WithMessage ('Close the game and the launcher first - still running from your install: ' + (($blocking | Sort-Object -Unique) -join ', '))
+    Stop-WithMessage ('Close the game and the launcher first - still running: ' + (($blocking | Sort-Object -Unique) -join ', '))
 }
 
 $workspace = Join-Path ([System.IO.Path]::GetTempPath()) ('fgo-en-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
