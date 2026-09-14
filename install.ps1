@@ -76,7 +76,7 @@ function Test-SupportedLanAddress([string]$Address) {
 
 function Test-InstallFolder([string]$Path) {
     if (-not $Path) { return $false }
-    foreach ($needed in @('App\ago.exe', 'App', 'Server', 'logs')) {
+    foreach ($needed in @('App\ago.exe', 'Server', 'logs')) {
         if (-not (Test-Path -LiteralPath (Join-Path $Path $needed))) { return $false }
     }
     return $true
