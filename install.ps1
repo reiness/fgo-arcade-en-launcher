@@ -97,6 +97,33 @@ function Get-DiskForPath([string]$Path) {
     return Get-CimInstance Win32_LogicalDisk -Filter "DeviceID = '$root'" -ErrorAction SilentlyContinue
 }
 
+function Get-ProcessImagePath([int]$ProcessId) {
+    # A process started as administrator hides its path from Win32_Process, and running the game as
+    # administrator is the NORMAL case here - without this every elevated FGO process would look
+    # unidentifiable and be refused, even one belonging to a different install. The limited-information
+    # query is permitted across integrity levels for the same user.
+    if (-not ('Fgo.ProcessPath' -as [type])) {
+        $signature = @(
+            '[DllImport("kernel32.dll", SetLastError=true)]',
+            'public static extern IntPtr OpenProcess(int access, bool inherit, int pid);',
+            '[DllImport("kernel32.dll", SetLastError=true, CharSet=CharSet.Unicode)]',
+            'public static extern bool QueryFullProcessImageNameW(IntPtr h, int flags, System.Text.StringBuilder buf, ref int size);',
+            '[DllImport("kernel32.dll", SetLastError=true)]',
+            'public static extern bool CloseHandle(IntPtr h);'
+        ) -join [Environment]::NewLine
+        Add-Type -Namespace Fgo -Name ProcessPath -MemberDefinition $signature
+    }
+    $handle = [Fgo.ProcessPath]::OpenProcess(0x1000, $false, $ProcessId)
+    if ($handle -eq [IntPtr]::Zero) { return $null }
+    try {
+        $buffer = New-Object System.Text.StringBuilder 1024
+        $size = 1024
+        if ([Fgo.ProcessPath]::QueryFullProcessImageNameW($handle, 0, $buffer, [ref]$size)) { return $buffer.ToString() }
+    }
+    finally { [void][Fgo.ProcessPath]::CloseHandle($handle) }
+    return $null
+}
+
 function Get-BlockingProcesses([string[]]$Folders) {
     # Only a process running FROM one of these folders counts - the same rule New-EnglishLauncher.ps1 uses,
     # so another copy of the game elsewhere on the machine is not a reason to refuse. A process whose path
@@ -104,11 +131,11 @@ function Get-BlockingProcesses([string[]]$Folders) {
     $found = @()
     $filter = "Name='FGOLocalPlatform.exe' OR Name='ago.exe' OR Name='amdaemon.exe'"
     foreach ($process in @(Get-CimInstance Win32_Process -Filter $filter -ErrorAction SilentlyContinue)) {
-        $running = $process.ExecutablePath
+        $running = Get-ProcessImagePath $process.ProcessId
+        if (-not $running) { $running = $process.ExecutablePath }
         if (-not $running) {
-            # Started as administrator: a normal-rights session cannot read its folder, so it cannot be
-            # ruled out. Say that plainly rather than claiming it belongs to this install.
-            $found += "$($process.Name) (pid $($process.ProcessId), started as administrator so its folder cannot be read)"
+            # Neither route could read it, so it cannot be ruled out and is refused.
+            $found += "$($process.Name) (pid $($process.ProcessId), its folder cannot be read)"
             continue
         }
         foreach ($folder in $Folders) {
