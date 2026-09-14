@@ -63,11 +63,17 @@ remove it first, then install again.
 
 That is a fair instinct. Do it by hand instead:
 
-1. Download `fgo-en-launcher-v1.0.0.zip` and `install.ps1` from the [Releases](../../releases) page.
-2. Unzip the patch anywhere.
-3. Run `install.ps1 -Install "<your FGO ARCADE folder>" -PayloadPath "<the zip you downloaded>"`.
+1. Get this repository - **Code > Download ZIP**, or clone it. You need `install.ps1` and
+   `tools\New-EnglishLauncher.ps1`; the installer looks for the engine next to itself before it looks online.
+2. Download `fgo-en-launcher-v1.0.0.zip` from the [Releases](../../releases) page. Do not unzip it.
+3. In that folder, run:
 
-The release page lists the zip's SHA-256 so you can check it yourself before running anything.
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Install "<your FGO ARCADE folder>" -PayloadPath "<the zip you downloaded>"
+```
+
+The release page lists the zip's SHA-256, and the installer checks it too, so you can verify the download
+yourself before anything is written. Done this way the install needs no network at all.
 
 ## What it puts on your disk
 

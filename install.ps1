@@ -139,6 +139,26 @@ function Get-RemoteFile([string]$Url, [string]$Destination) {
     }
 }
 
+function Get-Engine([string]$Workspace, [string]$Payload) {
+    # Beside the payload (the manual route), then beside this script (a clone of the repository), then from
+    # the repository itself. Looking locally first is what lets the manual route work with no network at all.
+    $enginePath = Join-Path $Workspace $EngineName
+    $candidates = @()
+    if ($Payload) { $candidates += Join-Path (Split-Path -Parent $Payload) $EngineName }
+    if ($PSScriptRoot) {
+        $candidates += Join-Path $PSScriptRoot "tools\$EngineName"
+        $candidates += Join-Path $PSScriptRoot $EngineName
+    }
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate) {
+            Copy-Item -LiteralPath $candidate -Destination $enginePath
+            return $enginePath
+        }
+    }
+    Get-RemoteFile "$RawRoot/tools/$EngineName" $enginePath
+    return $enginePath
+}
+
 Write-Host ''
 Write-Host 'FGO ARCADE - English launcher' -ForegroundColor Cyan
 Write-Host 'Adds a second, English launcher beside your existing one. Nothing you already have is changed.'
@@ -167,17 +187,9 @@ if ($blocking.Count -gt 0) {
 $workspace = Join-Path ([System.IO.Path]::GetTempPath()) ('fgo-en-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
 New-Item -ItemType Directory -Path $workspace -Force | Out-Null
 try {
-    $enginePath = Join-Path $workspace $EngineName
-    if ($PayloadPath -and (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $PayloadPath) $EngineName))) {
-        Copy-Item -LiteralPath (Join-Path (Split-Path -Parent $PayloadPath) $EngineName) -Destination $enginePath
-    }
-    else {
-        Get-RemoteFile "$RawRoot/tools/$EngineName" $enginePath
-    }
-
     if ($Remove) {
         Write-Host 'Removing the English launcher...'
-        & $enginePath -Install $Install -Remove
+        & (Get-Engine $workspace $PayloadPath) -Install $Install -Remove
         Write-Host ''
         Write-Host 'Done. Your install is back exactly as it was.' -ForegroundColor Green
         return
@@ -213,6 +225,8 @@ try {
         Stop-WithMessage ("The English launcher is already there: $target" + [Environment]::NewLine +
             '         To reinstall it, remove it first with the -Remove form of this command (see the README).')
     }
+
+    $enginePath = Get-Engine $workspace $PayloadPath
 
     if ($PayloadPath) {
         $zipPath = (Resolve-Path -LiteralPath $PayloadPath).Path
